@@ -80,3 +80,7 @@ The spectrum is only the beginning: raw IQ capture to SSD for offline analysis, 
 - [@luigifcruz](https://github.com/luigifcruz) and the CyberEther contributors, for the software that computes and displays the spectrum.
 - Ettus Research / NI for UHD, and the Pothos project for SoapySDR.
 - [Claude Code](https://claude.com/claude-code) (Anthropic), which did the installation, profiling, patches and this write-up together with the author.
+
+## License
+
+[MIT](LICENSE). The patches modify CyberEther, which is also MIT-licensed (© Luigi F. Cruz).
