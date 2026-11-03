@@ -31,7 +31,7 @@ Each chip does the job it is best at: the CPU feeds the USB link, the discrete G
 
 | Step | Configuration | Fill | Loss | Throughput |
 |---|---|---|---|---|
-| 0 | Stock build: rates above ~4 MS/s refused | low | 0 % | far below 61.44 MS/s |
+| 0 | Stock build: only 16 MHz / n rates accepted (16, 8, 5.33, 4 … MS/s) | low | 0 % | far below 61.44 MS/s |
 | 1 | Rate fix, debug-optimized build, CPU, Batches 32 / Mult. 32 | 98 % | 10 % | — |
 | 2 | CUDA, Duplicate with managed memory | 99 % | 60 % | — |
 | 3 | Debug-optimized build, CPU, Batches 8 / Mult. 4 | 18–82 % | ≈ 3.6 % | 450–491 MB/s |
@@ -42,7 +42,7 @@ Each chip does the job it is best at: the CPU feeds the USB link, the discrete G
 
 ## The fixes
 
-1. **Let the sample rate through** ([patch 1](patches/0001-soapy-accept-sample-rates-outside-reported-ranges.patch)). UHD reports B200 rates as `master_clock / n` for the *current* clock but reconfigures the clock on demand. CyberEther rejected anything outside that list, so the radio silently stayed at a low rate. The patch only rejects non-finite or non-positive rates and lets the driver decide.
+1. **Let the sample rate through** ([patch 1](patches/0001-soapy-accept-sample-rates-outside-reported-ranges.patch)). UHD reports B200 rates as `master_clock / n` for the *current* clock but reconfigures the clock on demand. The device opened with a 16 MHz clock, and CyberEther rejected anything outside `16 MHz / n` (e.g. 5 MS/s, or anything above 16 MS/s), so 61.44 MS/s was unreachable. The patch only rejects non-finite or non-positive rates and lets the driver decide.
 2. **Known-good FPGA image.** `UHD_IMAGES_DIR=$HOME/uhd_images` and `fpga=.../usrp_b210_fpga_github.bin` in the device string.
 3. **Optimized build.** `meson setup build-release -Dbuildtype=release -Dnative=true -Dc_std=gnu17 -Dcpp_args=-fcx-limited-range`. `-march=native` enables AVX-512; `-fcx-limited-range` removes the slow NaN-safe complex multiply (`__mulsc3`).
 4. **Batches must be a multiple of 16.** pocketfft vectorizes *across* transforms, in groups of 4 (SSE), 8 (AVX) or 16 (AVX-512). With 8 batches on an AVX-512 build every FFT ran scalar and loss rose from 3.6 % to 11 %. Batches = 16 fixed it.
