@@ -1,0 +1,83 @@
+From 4848d60b19c104b857bd8700735d0b35699990e8 Mon Sep 17 00:00:00 2001
+From: hgi586 <154084457+hgi586@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 10:11:21 -0500
+Subject: [PATCH] soapy: accept sample rates outside the reported ranges
+
+UHD reports the B200-series sample rates as master_clock / n for the
+current master clock, but it reconfigures the clock on demand. Rejecting
+rates outside the reported ranges made rates such as 61.44 MS/s
+unreachable on a B210. Only reject non-finite or non-positive rates and
+warn, but still request, rates outside the reported ranges so the
+driver can decide.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/domains/io/soapy/library/soapysdr.cc | 12 ++++++++++--
+ src/domains/io/soapy/module_tests.cc     | 20 ++++++++++++++++++++
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/src/domains/io/soapy/library/soapysdr.cc b/src/domains/io/soapy/library/soapysdr.cc
+index 0c913f5c..60d26a40 100644
+--- a/src/domains/io/soapy/library/soapysdr.cc
++++ b/src/domains/io/soapy/library/soapysdr.cc
+@@ -317,7 +317,10 @@ void SoapyReceiver::queryGainRange() {
+ }
+ 
+ Result SoapyReceiver::validateSettings(const F32 sampleRate, const F32 frequency) const {
+-    if (!SampleRateInRanges(sampleRateRanges, sampleRate)) {
++    // The reported sample rate ranges are only checked when the rate is applied. Some
++    // drivers (e.g. UHD) report the rates reachable with the current master clock but
++    // reconfigure the clock on demand, so rates outside the ranges are still valid.
++    if (!std::isfinite(sampleRate) || sampleRate <= 0.0f) {
+         JST_ERROR("[MODULE_SOAPY] Sample rate ({:.3f} MHz) not supported.", sampleRate / 1e6);
+         return Result::ERROR;
+     }
+@@ -406,11 +409,16 @@ Result SoapyReceiver::setSampleRate(const F32 sampleRate) {
+         return Result::ERROR;
+     }
+ 
+-    if (!SampleRateInRanges(sampleRateRanges, sampleRate)) {
++    if (!std::isfinite(sampleRate) || sampleRate <= 0.0f) {
+         JST_WARN("[MODULE_SOAPY] Sample rate ({:.3f} MHz) not supported.", sampleRate / 1e6);
+         return Result::WARNING;
+     }
+ 
++    if (!SampleRateInRanges(sampleRateRanges, sampleRate)) {
++        JST_WARN("[MODULE_SOAPY] Sample rate ({:.3f} MHz) is outside the ranges reported "
++                 "by the device. Requesting it anyway.", sampleRate / 1e6);
++    }
++
+     if (library->api().setSampleRate(device, SoapyAbi::RX, 0, sampleRate) != 0) {
+         JST_ERROR("[MODULE_SOAPY] Failed to set sample rate: {}", failure());
+         return Result::ERROR;
+diff --git a/src/domains/io/soapy/module_tests.cc b/src/domains/io/soapy/module_tests.cc
+index bb1cde1c..b05258f0 100644
+--- a/src/domains/io/soapy/module_tests.cc
++++ b/src/domains/io/soapy/module_tests.cc
+@@ -219,3 +219,23 @@ TEST_CASE_METHOD(TestSoapy::Runtime,
+     checkApplied();
+     REQUIRE(TestSoapy::State().concurrentChanges == 0);
+ }
++
++TEST_CASE_METHOD(TestSoapy::Runtime,
++                 "Soapy forwards sample rates outside the reported ranges to the driver",
++                 "[modules][soapy][reconfigure][rate]") {
++    const auto module = BuildSoapyModule();
++    struct Cleanup {
++        std::shared_ptr<Module> module;
++        ~Cleanup() { static_cast<void>(module->destroy()); }
++    } cleanup{module};
++    Modules::Soapy config;
++    config.deviceString = "driver=scripted";
++    config.sampleRate = 20.0e6f;
++    config.numberOfBatches = 1;
++    config.numberOfTimeSamples = 8;
++    REQUIRE(module->create("test", config, {}) == Result::SUCCESS);
++    REQUIRE(TestSoapy::State().settings().sampleRate == 20.0e6);
++
++    REQUIRE(module->reconfigure({{"sampleRate", 61.44e6f}}) == Result::SUCCESS);
++    REQUIRE(TestSoapy::State().settings().sampleRate == static_cast<F64>(61.44e6f));
++}
+-- 
+2.53.0
+

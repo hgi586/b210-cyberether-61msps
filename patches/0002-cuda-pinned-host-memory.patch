@@ -1,0 +1,48 @@
+diff --git a/src/memory/buffer_cuda.cc b/src/memory/buffer_cuda.cc
+index 7d5c3a0d..39e33c6e 100644
+--- a/src/memory/buffer_cuda.cc
++++ b/src/memory/buffer_cuda.cc
+@@ -51,10 +51,12 @@ class CudaBackend final : public CudaBufferBackend, public Backend {
+                 JST_ERROR("[MEMORY:BUFFER:CUDA] Allocation size {} is too large.", bytes);
+                 return Result::ERROR;
+             }
+-            JST_CUDA_CHECK(cudaMallocManaged(&buffer, allocBytes), [&] {
+-                JST_ERROR("[MEMORY:BUFFER:CUDA] Failed to allocate managed memory: {}.", err);
++            // Mapped pinned host memory: the CPU writes at full speed and kernels read it
++            // over PCIe, without the per-frame page migrations of managed memory.
++            JST_CUDA_CHECK(cudaHostAlloc(&buffer, allocBytes, cudaHostAllocMapped | cudaHostAllocPortable), [&] {
++                JST_ERROR("[MEMORY:BUFFER:CUDA] Failed to allocate pinned host memory: {}.", err);
+             });
+-            allocationKind = AllocationKind::Managed;
++            allocationKind = AllocationKind::Pinned;
+             hostAccessibleFlag = true;
+             locationState = Location::Unified;
+ #if !defined(JST_OS_WINDOWS)
+@@ -340,7 +342,8 @@ class CudaBackend final : public CudaBufferBackend, public Backend {
+     bool deviceNative() const override {
+         return allocationKind == AllocationKind::Device ||
+                allocationKind == AllocationKind::VirtualMemory ||
+-               allocationKind == AllocationKind::Managed;
++               allocationKind == AllocationKind::Managed ||
++               allocationKind == AllocationKind::Pinned;
+     }
+ 
+     bool exportableDeviceMemory() const override {
+@@ -384,6 +387,9 @@ class CudaBackend final : public CudaBufferBackend, public Backend {
+                 case AllocationKind::Device:
+                     cudaFree(buffer);
+                     break;
++                case AllocationKind::Pinned:
++                    cudaFreeHost(buffer);
++                    break;
+                 default:
+                     break;
+             }
+@@ -407,6 +413,7 @@ class CudaBackend final : public CudaBufferBackend, public Backend {
+         None,
+         Device,
+         Managed,
++        Pinned,
+         VirtualMemory,
+         ImportedHost,
+         ImportedVulkan,
