@@ -52,7 +52,7 @@ Each chip does the job it is best at: the CPU feeds the USB link, the discrete G
 
 ## Reproduce
 
-- Apply both patches to CyberEther (tested on commit `fa027fb8`, v1.19) and build as in fix 3.
+- Apply patches 1 and 2 to CyberEther (tested on commit `fa027fb8`, v1.19) and build as in fix 3. Add patch 3 for the [wideband sweep](docs/sweep.md).
 - Use [flowgraph/b210-spectrum-cuda.yml](flowgraph/b210-spectrum-cuda.yml) (replace `/home/USER`), or the [launcher/ce](launcher/ce) script: `ce` (CPU) or `ce gpu` (CUDA). Settings can be overridden per run, e.g. `B=32 ce gpu`.
 
 Practical notes:
@@ -69,6 +69,10 @@ Practical notes:
 - Verified on this clone, FPGA image and laptop, over 15 minutes.
 - Patch 2 changes every host-accessible CUDA buffer and is an experiment; patch 1 is proposed upstream.
 - The CPU-only path still loses about 2 % because the spectrum chain runs on one thread.
+
+## Wideband sweep
+
+The B210 can also sweep a wide band with CyberEther's SDR Sweep block, for example 70 MHz to 1 GHz at 1.62 GHz/s, through a SoapySDR backend ([patch 3](patches/0003-sdr-sweep-soapysdr-devices.patch)). Hop layout, Capture Rate, Settling Time and measurements: [docs/sweep.md](docs/sweep.md).
 
 ## What's next
 
