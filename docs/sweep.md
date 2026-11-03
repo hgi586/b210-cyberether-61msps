@@ -19,13 +19,26 @@ Measured on the B210 clone and the same laptop as the main write-up, sweeping 70
 Apply patch 3 on top of patches 1 and 2, rebuild, then use the [launcher](../launcher/ce):
 
 ```bash
-SERIAL=31B92DD ce scan   # use your own B210's serial
-START=400000000 END=2500000000 RES=100000 SERIAL=31B92DD ce scan
+ce scan
+START=400000000 END=2500000000 RES=100000 ce scan
 ```
 
-`SoapySDRUtil --find="driver=uhd"` prints the serial. `START` and `END` are in Hz, `RES` is the bin width in Hz, `DWELL` is the number of captures averaged per hop and `SCANGAIN` is a fixed gain in dB. Automatic gain is avoided because the levels of different hops would no longer be comparable.
+`START` and `END` are in Hz, `RES` is the bin width in Hz, `DWELL` is the number of captures averaged per hop and `SCANGAIN` is a fixed gain in dB. Automatic gain is avoided because the levels of different hops would no longer be comparable.
 
 In the block itself, the device appears as `B210 <serial> (SoapySDR)`.
+
+### Why a serial, and two radios at once
+
+The SDR Sweep block names a radio as `driver=soapy,serial=<serial>`, never by type alone, so it cannot open the wrong one when several are plugged in. In the block's **Device** list you just pick it; the launcher, which writes the flowgraph beforehand, needs the serial. Without `SERIAL`, it takes the first free B210 reported by `SoapySDRUtil --find="driver=uhd,type=b200"`.
+
+UHD does not list a radio that is already open. With two B210s, for example one on 2.4 GHz and one on 5.8 GHz at the same time, start the second sweep once the first window is open and it takes the other radio:
+
+```bash
+START=2400000000 END=2500000000 ce scan     # terminal 1
+START=5725000000 END=5875000000 ce scan     # terminal 2
+```
+
+Started at the same time, both would pick the same radio. To choose which radio, and so which antenna, listens to which band, set `SERIAL=<serial>`. Each radio gets its own flowgraph and log (`~/.cache/cyberether/scan-<serial>.log`). Two B210s at once were not tested here.
 
 ## How the hops are laid out
 

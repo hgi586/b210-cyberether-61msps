@@ -5,7 +5,7 @@
 #   ce scan         -> sweep START to END (SDR Sweep block, SoapySDR backend, patch 3)
 #   ce file.yml     -> open that flowgraph as is
 # Override a setting for one run: B=32 M=32 ce
-# Log: ~/.cache/cyberether/last.log
+# Log: ~/.cache/cyberether/last.log (ce scan: scan-<serial>.log)
 
 # ---- Settings (edit here) ----
 DEVICE="${DEVICE:-driver=uhd,type=b200,fpga=$HOME/uhd_images/usrp_b210_fpga_github.bin,num_recv_frames=1024}"
@@ -18,7 +18,7 @@ B="${B:-16}"                   # Batches (multiple of 16: AVX-512 vectorized FFT
 S="${S:-8192}"                 # Samples (FFT size)
 M="${M:-4}"                    # Buffer Multiplier
 # Sweep (ce scan)
-SERIAL="${SERIAL:-}"           # B210 serial: SoapySDRUtil --find="driver=uhd"
+SERIAL="${SERIAL:-}"           # B210 serial; empty = first free B210
 START="${START:-70000000}"     # Hz
 END="${END:-1000000000}"       # Hz
 RES="${RES:-50000}"            # resolution in Hz (bin width)
@@ -36,11 +36,26 @@ esac
 
 if [ "$1" = scan ]; then
     shift
+    # The SDR Sweep block names a radio as driver=...,serial=...: the serial is required,
+    # even with a single radio plugged in, so the block never opens the wrong one.
+    # Without SERIAL, take the first free B210. UHD does not list a radio that is already
+    # open: with two B210s (for example 2.4 GHz and 5.8 GHz at the same time), the first
+    # run takes one radio and the second, started once the first window is open, the other:
+    #   START=2400000000 END=2500000000 ce scan     (terminal 1)
+    #   START=5725000000 END=5875000000 ce scan     (terminal 2)
+    # Started at the same time, both would see the same free radio. To choose which radio
+    # (so which antenna) listens to which band, set SERIAL: SERIAL=31B92DD ce scan
     if [ -z "$SERIAL" ]; then
-        echo "Set SERIAL to the B210 serial (SoapySDRUtil --find=\"driver=uhd\")." >&2
-        exit 1
+        FREE=$(SoapySDRUtil --find="driver=uhd,type=b200" 2>/dev/null | sed -n 's/^ *serial = //p' | sort -u)
+        SERIAL=$(printf '%s\n' "$FREE" | head -n 1)
+        if [ -z "$SERIAL" ]; then
+            echo "No free B210 found (already open in another CyberEther, or unplugged)." >&2
+            exit 1
+        fi
+        echo "Free B210s: $(echo $FREE) -> $SERIAL"
     fi
-    FG="$DIR/b210-scan.yml"
+    FG="$DIR/b210-scan-$SERIAL.yml"
+    LOG="$DIR/scan-$SERIAL.log"
     cat > "$FG" <<YML
 version: 2
 title: B210 Sweep
@@ -90,8 +105,8 @@ graph:
     meta:
       node: {x: 497, y: 95, width: 860, height: 0}
 YML
-    echo "B210 sweep: $START to $END Hz, resolution $RES Hz, dwell $DWELL  (log: $DIR/last.log)"
-    exec stdbuf -oL -eL /usr/local/bin/cyberether -v "$@" "$FG" > "$DIR/last.log" 2>&1
+    echo "B210 $SERIAL sweep: $START to $END Hz, resolution $RES Hz, dwell $DWELL  (log: $LOG)"
+    exec stdbuf -oL -eL /usr/local/bin/cyberether -v "$@" "$FG" > "$LOG" 2>&1
 fi
 
 GPU=0
