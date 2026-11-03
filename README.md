@@ -61,6 +61,7 @@ Practical notes:
 - **CUDA on Ubuntu:** with `nvidia-cuda-toolkit`, a small directory of symlinks in the NVIDIA layout plus `CUDA_PATH` lets Meson find CUDA.
 - **Live USB Ubuntu:** `cuInit` returned 999 until `nvidia-uvm` was loaded and its device node created (made permanent with a udev rule).
 - **Counters:** CyberEther's Buffer Loss is cumulative since start; UHD prints `O` when the radio itself overflows.
+- **Port names on the clone:** UHD names the two connectors of each channel `TX/RX` and `RX2`, and CyberEther shows these names. The clone's case numbers its ports by channel instead: the port marked **RX1** is UHD's `RX2` on channel A (antenna `RX2`, channel 0), confirmed with a 50 Ω termination. The case's RX2 port is presumably channel B's receive input (not tested).
 
 ## Caveats
 
